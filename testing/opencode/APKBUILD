@@ -1,0 +1,197 @@
+# Contributor: SaaSD3v <saasdev@proton.me>
+# Maintainer: SaaSD3v <saasdev@proton.me>
+pkgname=opencode
+pkgver=1.17.15
+pkgrel=0
+pkgdesc="Open source AI coding agent for the terminal"
+url="https://github.com/anomalyco/opencode"
+arch="x86_64 aarch64"
+license="MIT"
+depends="git"
+makedepends="bun nodejs npm python3 make g++"
+source="https://github.com/anomalyco/opencode/archive/refs/tags/v$pkgver.tar.gz"
+options="!check net"
+
+build() {
+	cd "$srcdir/opencode-$pkgver"
+
+	# Install dependencies
+	bun install
+
+	# Build standalone executable
+	cd packages/opencode
+	bun run script/build.ts --single
+}
+
+package() {
+	cd "$srcdir/opencode-$pkgver"
+
+	# Determine architecture
+	local arch
+	case "$CARCH" in
+		x86_64) arch="linux-x64" ;;
+		aarch64) arch="linux-arm64" ;;
+	esac
+
+	# Install binary
+	install -Dm755 "packages/opencode/dist/opencode-$arch/bin/opencode" \
+		"$pkgdir/usr/bin/opencode"
+
+	# Install default configuration
+	install -Dm644 /dev/stdin "$pkgdir/etc/opencode/config.json" <<- 'EOF'
+{
+  "providers": {
+    "anthropic": {
+      "disabled": false
+    },
+    "openai": {
+      "disabled": false
+    }
+  },
+  "agents": {
+    "coder": {
+      "model": "claude-3.7-sonnet",
+      "maxTokens": 5000
+    },
+    "task": {
+      "model": "claude-3.7-sonnet",
+      "maxTokens": 5000
+    }
+  },
+  "autoCompact": true
+}
+EOF
+
+	# Install plugins
+	mkdir -p "$pkgdir/usr/share/opencode/plugins"
+
+	# Feature development plugin
+	mkdir -p "$pkgdir/usr/share/opencode/plugins/feature-dev"
+	install -Dm644 /dev/stdin "$pkgdir/usr/share/opencode/plugins/feature-dev/README.md" <<- 'EOF'
+# Feature Development Plugin
+
+7-phase workflow for building features.
+
+## Command: /feature-dev
+
+### Phases
+1. Discovery - Understand requirements
+2. Codebase Exploration - Analyze existing code
+3. Clarifying Questions - Resolve ambiguities
+4. Architecture Design - Plan implementation
+5. Implementation - Build the feature
+6. Quality Review - Ensure code quality
+7. Summary - Document what was built
+
+### Agents
+- code-explorer: Analyzes codebase by tracing execution paths
+- code-architect: Designs feature architectures
+- code-reviewer: Reviews code for bugs and quality
+EOF
+
+	# Code review plugin
+	mkdir -p "$pkgdir/usr/share/opencode/plugins/code-review"
+	install -Dm644 /dev/stdin "$pkgdir/usr/share/opencode/plugins/code-review/README.md" <<- 'EOF'
+# Code Review Plugin
+
+Automated PR code review with confidence scoring.
+
+## Command: /code-review
+
+### Review Aspects
+- CLAUDE.md compliance
+- Bug detection
+- Historical context
+- Code quality
+- Type design
+
+### Confidence Scoring
+- 90-100: Critical issues
+- 75-89: High priority
+- 50-74: Medium priority
+EOF
+
+	# Security guidance plugin
+	mkdir -p "$pkgdir/usr/share/opencode/plugins/security-guidance"
+	install -Dm644 /dev/stdin "$pkgdir/usr/share/opencode/plugins/security-guidance/README.md" <<- 'EOF'
+# Security Guidance Plugin
+
+Security review for code with pattern warnings and LLM review.
+
+## Layers
+1. Pattern warnings - regex-based reminders
+2. LLM diff review - fast model review
+3. Agentic commit review - multi-file analysis
+
+## Patterns Monitored
+- Command injection
+- XSS vulnerabilities
+- Hardcoded secrets
+- Unsafe deserialization
+- Path traversal
+EOF
+
+	# Commit commands plugin
+	mkdir -p "$pkgdir/usr/share/opencode/plugins/commit-commands"
+	install -Dm644 /dev/stdin "$pkgdir/usr/share/opencode/plugins/commit-commands/README.md" <<- 'EOF'
+# Commit Commands Plugin
+
+Git workflow automation.
+
+## Commands
+- /commit: Create git commit
+- /commit-push-pr: Commit, push, and create PR
+- /clean_gone: Remove stale branches
+
+## Commit Format
+<type>(<scope>): <description>
+
+Types: feat, fix, docs, style, refactor, test, chore
+EOF
+
+	# Frontend design plugin
+	mkdir -p "$pkgdir/usr/share/opencode/plugins/frontend-design"
+	install -Dm644 /dev/stdin "$pkgdir/usr/share/opencode/plugins/frontend-design/README.md" <<- 'EOF'
+# Frontend Design Plugin
+
+Create distinctive, production-grade frontend interfaces.
+
+## Guidelines
+- Bold typography choices
+- Distinctive color palettes
+- High-impact animations
+- Context-aware implementation
+EOF
+
+	# Install plugins configuration
+	install -Dm644 /dev/stdin "$pkgdir/etc/opencode/plugins.json" <<- 'EOF'
+{
+  "plugins": {
+    "feature-dev": {
+      "enabled": true,
+      "path": "/usr/share/opencode/plugins/feature-dev"
+    },
+    "code-review": {
+      "enabled": true,
+      "path": "/usr/share/opencode/plugins/code-review"
+    },
+    "security-guidance": {
+      "enabled": true,
+      "path": "/usr/share/opencode/plugins/security-guidance"
+    },
+    "commit-commands": {
+      "enabled": true,
+      "path": "/usr/share/opencode/plugins/commit-commands"
+    },
+    "frontend-design": {
+      "enabled": true,
+      "path": "/usr/share/opencode/plugins/frontend-design"
+    }
+  }
+}
+EOF
+}
+
+sha512sums="
+SKIP
+"
