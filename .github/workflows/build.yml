@@ -1,0 +1,72 @@
+name: Build OpenCode ISO
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y squashfs-tools xorriso grub-pc-bin grub-efi-amd64-bin mtools dosfstools
+    
+    - name: Build Alpine ISO
+      run: |
+        mkdir -p build/rootfs
+        wget https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/x86_64/alpine-minirootfs-3.21.3-x86_64.tar.gz
+        tar -xzf alpine-minirootfs-3.21.3-x86_64.tar.gz -C build/rootfs
+        sudo chroot build/rootfs /bin/sh -c "
+          apk update
+          apk add --no-cache bash openssh sudo git
+          addgroup opencode
+          adduser -D -G opencode -s /bin/bash opencode
+          echo 'opencode ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+          apk add --no-cache --virtual .build-deps bun nodejs npm python3 make g++
+          cd /tmp
+          git clone --depth 1 --branch v1.17.15 https://github.com/anomalyco/opencode.git
+          cd opencode
+          bun install
+          cd packages/opencode
+          bun run script/build.ts --single
+          mkdir -p /usr/local/bin
+          cp dist/opencode-linux-x64/bin/opencode /usr/local/bin/
+          chmod +x /usr/local/bin/opencode
+          mkdir -p /usr/local/share/opencode/plugins
+          cp -r /tmp/opencode/packages/plugin/* /usr/local/share/opencode/plugins/
+          cd /
+          rm -rf /tmp/opencode
+          apk del .build-deps
+          cat > /home/opencode/.bashrc << 'EOF'
+if [ -z \"\$OPENCODE_STARTED\" ]; then
+  export OPENCODE_STARTED=1
+  echo Welcome to OpenCode Alpine!
+  opencode
+fi
+EOF
+          chown opencode:opencode /home/opencode/.bashrc
+          echo 'opencode:opencode' | chpasswd
+          rc-update add sshd default
+        "
+        mkdir -p build/iso/boot/grub
+        cat > build/iso/boot/grub/grub.cfg << 'EOF'
+set timeout=5
+set default=0
+menuentry OpenCode Alpine {
+  linux /boot/vmlinuz-virt initrd=/boot/initramfs-virt modules=loop,squashfs,sd-mod,usb-storage console=ttyS0,115200
+  initrd /boot/initramfs-virt
+}
+EOF
+        sudo mksquashfs build/rootfs build/iso/rootfs.squashfs -comp xz -b 1M
+        sudo cp build/rootfs/boot/vmlinuz-virt build/iso/boot/
+        sudo cp build/rootfs/boot/initramfs-virt build/iso/boot/
+        grub-mkrescue -o opencode-alpine.iso build/iso
+    
+    - uses: actions/upload-artifact@v4
+      with:
+        name: opencode-alpine-iso
+        path: opencode-alpine.iso
